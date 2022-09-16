@@ -13,5 +13,6 @@ fn main() {
     let mut data = String::new();
     file.read_to_string(&mut data)
         .expect(&format!("Error while reading file: {}", filename));
-    println!("{}", data);
+    let ast = parser::parse(&data);
+    dbg!("{}", ast);
 }

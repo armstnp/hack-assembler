@@ -2,27 +2,11 @@ use crate::commands::*;
 
 use nom::branch::alt;
 use nom::bytes::complete::{is_a, tag};
-use nom::character::complete::{anychar, char, digit1, line_ending, one_of, space0, u8};
+use nom::character::complete::{char, digit1, one_of};
 use nom::character::is_digit;
-use nom::combinator::{eof, map, map_res, opt, verify, peek};
-use nom::multi::many_till;
+use nom::combinator::{map, map_res, opt, verify};
 use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::IResult;
-
-fn eol_or_complete(input: &str) -> IResult<&str, ()> {
-    map(alt((line_ending, peek(eof))), |_| ())(input)
-}
-
-fn comment(input: &str) -> IResult<&str, ()> {
-    map(
-        preceded(tag("//"), many_till(anychar, eol_or_complete)),
-        |_| (),
-    )(input)
-}
-
-fn whitespace(input: &str) -> IResult<&str, ()> {
-    map(terminated(space0, opt(comment)), |_| ())(input)
-}
 
 fn char_to_lhs(c: char) -> Lhs {
     match c {
@@ -153,37 +137,48 @@ fn l_command(input: &str) -> IResult<&str, Command> {
     map(delimited(tag("("), symbol, tag(")")), Command::L)(input)
 }
 
-fn empty_line(input: &str) -> IResult<&str, ()> {
-    terminated(whitespace, eol_or_complete)(input)
-}
+pub fn parse(input: &str) -> Vec<Command> {
+    let mut commands = vec![];
 
-fn command_line(input: &str) -> IResult<&str, Command> {
-    terminated(
-        delimited(
-            whitespace,
-            alt((a_command, l_command, c_command)),
-            whitespace,
-        ),
-        eol_or_complete,
-    )(input)
-}
+    for line in input.lines() {
+        let line = line.split_once("//").map(|(s, _)| s).unwrap_or(line).trim();
+        if line.is_empty() {
+            continue;
+        }
 
-fn line(input: &str) -> IResult<&str, Option<Command>> {
-    alt((map(command_line, Some), map(empty_line, |_| None)))(input)
-}
+        //let res = try_parse_a(line).or_else(try_parse_l).or_else(try_parse_c);
 
-fn lines(input: &str) -> IResult<&str, Vec<Command>> {
-    terminated(
-        map(many_till(line, eof), |(lines, _)| {
-            lines.iter().flatten().map(Command::clone).collect()
-        }),
-        eof,
-    )(input)
+        let res = alt((a_command, l_command, c_command))(line);
+
+        match res {
+            Ok(("", command)) => commands.push(command),
+            Ok((remainder, _)) => panic!("Command {} has extra parts {}", line, remainder),
+            Err(line) => panic!("Invalid command {}", line),
+        }
+    }
+
+    commands
 }
 
 #[test]
-fn testit() {
-    assert_eq!(comment("// abcdefg"), Ok(("", ())));
+fn test_parse() {
+    assert_eq!(
+        parse("     // The beginning \n// Of the end\r\n(LABEL) \n   @12\n @B_NUT12$\nD=M+1\n"),
+        vec![
+            Command::L("LABEL".to_string()),
+            Command::A(Address::Constant(12)),
+            Command::A(Address::Symbol("B_NUT12$".to_string())),
+            Command::C(
+                Some(Lhs::D),
+                Expression::Binary(Lhs::M, BinaryOp::Add, Rhs::One),
+                None
+            )
+        ]
+    )
+}
+
+#[test]
+fn nom_parse_tests() {
     assert_eq!(
         expr("D+M"),
         Ok(("", Expression::Binary(Lhs::D, BinaryOp::Add, Rhs::M)))
@@ -213,48 +208,4 @@ fn testit() {
     );
 
     assert_eq!(symbol("LABEL"), Ok(("", "LABEL".to_string())));
-
-    assert_eq!(line(""), Ok(("", None)));
-    assert_eq!(line("     // The beginning "), Ok(("", None)));
-    assert_eq!(line("// The beginning "), Ok(("", None)));
-    assert_eq!(line("     // The beginning \r\n"), Ok(("", None)));
-    assert_eq!(line("  \t  "), Ok(("", None)));
-    assert_eq!(
-        line(" D=D|M  // Label"),
-        Ok((
-            "",
-            Some(Command::C(
-                Some(Lhs::D),
-                Expression::Binary(Lhs::D, BinaryOp::Or, Rhs::M),
-                None
-            ))
-        ))
-    );
-    assert_eq!(
-        line(" (LABEL)  // Label"),
-        Ok(("", Some(Command::L("LABEL".to_string()))))
-    );
-
-    assert_eq!(eol_or_complete("\r\n"), Ok(("", ())));
-    assert_eq!(eol_or_complete(""), Ok(("", ())));
-    assert_eq!(empty_line("// Of the end\r\n"), Ok(("", ())));
-    assert_eq!(lines("\n\n"), Ok(("", vec![])));
-    assert_eq!(lines("     // The beginning \n// Of the end\r\n"), Ok(("", vec![])));
-
-    assert_eq!(
-        lines("     // The beginning \n// Of the end\r\n(LABEL) \n   @12\n @B_NUT12$\nD=M+1\n"),
-        Ok((
-            "",
-            vec![
-                Command::L("LABEL".to_string()),
-                Command::A(Address::Constant(12)),
-                Command::A(Address::Symbol("B_NUT12$".to_string())),
-                Command::C(
-                    Some(Lhs::D),
-                    Expression::Binary(Lhs::M, BinaryOp::Add, Rhs::One),
-                    None
-                )
-            ]
-        ))
-    )
 }
