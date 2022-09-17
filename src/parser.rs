@@ -17,8 +17,21 @@ fn char_to_lhs(c: char) -> Lhs {
     }
 }
 
+fn chars_to_destination(cs: &str) -> Destination {
+    let mut dest: Destination = Default::default();
+    for c in cs.chars() {
+        match c {
+            'A' => dest.a = true,
+            'D' => dest.d = true,
+            'M' => dest.m = true,
+            _ => panic!("Invalid destination {} in {}", c, cs),
+        }
+    }
+    dest
+}
+
 fn lhs(input: &str) -> IResult<&str, Lhs> {
-    map(one_of("01ADM"), char_to_lhs)(input)
+    map(one_of("ADM"), char_to_lhs)(input)
 }
 
 fn rhs(input: &str) -> IResult<&str, Rhs> {
@@ -71,8 +84,20 @@ fn expr(input: &str) -> IResult<&str, Expression> {
     alt((binexpr, unexpr))(input)
 }
 
-fn dest(input: &str) -> IResult<&str, Lhs> {
-    map(terminated(one_of("ADM"), char('=')), char_to_lhs)(input)
+fn dest(input: &str) -> IResult<&str, Destination> {
+    map(
+        opt(map(
+            terminated(is_a("ADM"), char('=')),
+            chars_to_destination,
+        )),
+        |opt_dest: Option<Destination>| {
+            opt_dest.unwrap_or(Destination {
+                a: false,
+                d: false,
+                m: false,
+            })
+        },
+    )(input)
 }
 
 fn jump(input: &str) -> IResult<&str, JumpCondition> {
@@ -103,7 +128,7 @@ fn jump(input: &str) -> IResult<&str, JumpCondition> {
 }
 
 fn c_command(input: &str) -> IResult<&str, Command> {
-    map(tuple((opt(dest), expr, opt(jump))), |(dest, expr, jump)| {
+    map(tuple((dest, expr, opt(jump))), |(dest, expr, jump)| {
         Command::C(dest, expr, jump)
     })(input)
 }
@@ -146,8 +171,6 @@ pub fn parse(input: &str) -> Vec<Command> {
             continue;
         }
 
-        //let res = try_parse_a(line).or_else(try_parse_l).or_else(try_parse_c);
-
         let res = alt((a_command, l_command, c_command))(line);
 
         match res {
@@ -169,7 +192,10 @@ fn test_parse() {
             Command::A(Address::Constant(12)),
             Command::A(Address::Symbol("B_NUT12$".to_string())),
             Command::C(
-                Some(Lhs::D),
+                Destination {
+                    d: true,
+                    ..Default::default()
+                },
                 Expression::Binary(Lhs::M, BinaryOp::Add, Rhs::One),
                 None
             )
@@ -188,7 +214,10 @@ fn nom_parse_tests() {
         Ok((
             "",
             Command::C(
-                Some(Lhs::D),
+                Destination {
+                    d: true,
+                    ..Default::default()
+                },
                 Expression::Binary(Lhs::D, BinaryOp::Or, Rhs::M),
                 Some(JumpCondition::Equal)
             )

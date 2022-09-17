@@ -35,6 +35,13 @@ pub enum Expression {
     Binary(Lhs, BinaryOp, Rhs),
 }
 
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct Destination {
+    pub a: bool,
+    pub d: bool,
+    pub m: bool,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum JumpCondition {
     Greater,
@@ -55,6 +62,6 @@ pub enum Address {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Command {
     A(Address),
-    C(Option<Lhs>, Expression, Option<JumpCondition>),
+    C(Destination, Expression, Option<JumpCondition>),
     L(String),
 }
