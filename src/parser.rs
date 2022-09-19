@@ -1,12 +1,16 @@
 use crate::commands::*;
 
-use nom::branch::alt;
-use nom::bytes::complete::{is_a, tag};
-use nom::character::complete::{char, digit1, one_of};
-use nom::character::is_digit;
-use nom::combinator::{map, map_res, opt, verify};
-use nom::sequence::{delimited, preceded, terminated, tuple};
-use nom::IResult;
+use nom::{
+    branch::alt,
+    bytes::complete::{is_a, tag},
+    character::{
+        complete::{char, digit1, one_of},
+        is_digit,
+    },
+    combinator::{map, map_res, opt, verify},
+    sequence::{delimited, preceded, terminated, tuple},
+    IResult,
+};
 
 fn char_to_lhs(c: char) -> Lhs {
     match c {
